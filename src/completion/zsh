@@ -1,0 +1,20 @@
+#compdef kontext
+
+__kubectl_context_list() {
+  local -a ctx_list_disp ctx_list
+  local expl
+  IFS=$'\n' ctx_list=($(kubectl config get-contexts -o name))
+  _wanted ctx expl 'kubernetes context' compadd "$@" "$ctx_list_disp[@]" - "${(@)ctx_list}"
+}
+
+__kontext() {
+  _arguments \
+    - set1 '-h' '--help' \
+    - set2 '-v' '--version' \
+    - set3 \
+    '-n' '--namespace' \
+    '--kubeconfig:filename:_files' \
+    ':ctx arg:__kubectl_context_list' 
+}
+
+compdef __kontext kontext
