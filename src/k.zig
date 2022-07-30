@@ -83,8 +83,12 @@ pub const KubeContext = struct {
         _ = c.setenv("KUBECONFIG", new_kubeconfig, 1);
         const _argv = try self.argv();
         var child = std.ChildProcess.init(_argv, self.allocator);
-        _ = try std.ChildProcess.spawnAndWait(&child);
-        try std.os.kill(c.getppid(), std.os.SIG.HUP);
+        const term = try std.ChildProcess.spawnAndWait(&child);
+        switch (term.Exited) {
+            0 => try std.os.kill(c.getppid(), std.os.SIG.HUP),
+            1 => return,
+            else => unreachable,
+        }
     }
 };
 
