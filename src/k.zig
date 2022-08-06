@@ -61,9 +61,8 @@ pub const KubeContext = struct {
         if (self.context) |context| {
             if (self.namespace) |namespace| {
                 try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config set-context \"{s}\" --namespace=\"{s}\"", .{ context, namespace }));
-            } else {
-                try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config use-context \"{s}\"", .{context}));
             }
+            try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config use-context \"{s}\"", .{context}));
         } else if (self.namespace) |namespace| {
             try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config set-context \"$(kubectl config current-context)\" --namespace=\"{s}\"", .{namespace}));
         } else {
