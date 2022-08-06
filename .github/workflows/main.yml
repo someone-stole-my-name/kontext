@@ -10,8 +10,7 @@ jobs:
       - name: Build
         run: |
           make docker-release
-          ls -l
-        
+
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')

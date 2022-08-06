@@ -4,8 +4,7 @@
 
 Set Kubernetes contexts & namespaces per shell and work on multiple clusters at the same time. Stop being afraid of nuking prod (🍿). Setting your context per shell ensures you're less likely to run commands against the wrong cluster in a different shell.
 
-<!--![demo](resources/demo.gif)-->
-<!--[![asciicast](https://asciinema.org/a/14.png)](https://asciinema.org/a/14)-->
+![demo](resources/demo.gif)
 
 ## Usage
 
@@ -21,6 +20,14 @@ Options:
 ### Getting started
 
 #### Install
+
+Grab the latest [release](https://github.com/someone-stole-my-name/kontext/releases) for your platform and move it to a directory in your $PATH.
+
+```
+curl -o 'kontext' -L https://github.com/someone-stole-my-name/kontext/releases/download/0.1.0/kontext-aarch64-macos.12 && \
+  chmod +x kontext && \
+  mv kontext ~/.local/bin/
+```
 
 #### Autocompletion
 
