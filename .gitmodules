@@ -1,0 +1,3 @@
+[submodule "src/zig-libyaml"]
+	path = src/zig-libyaml
+	url = git@github.com:someone-stole-my-name/zig-libyaml.git

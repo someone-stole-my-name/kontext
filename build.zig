@@ -8,6 +8,8 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.linkLibC();
+    const yaml = @import("src/zig-libyaml/build.zig").linkExe;
+    try yaml(exe, "src/zig-libyaml");
     exe.install();
 
     const run_cmd = exe.run();

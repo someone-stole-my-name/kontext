@@ -1,6 +1,7 @@
 const std = @import("std");
 const fs = std.fs;
 const mem = std.mem;
+const yaml = @import("zig-libyaml/src/libyaml.zig");
 const c = @cImport({
     @cInclude("stdlib.h");
     @cInclude("unistd.h");
@@ -53,41 +54,105 @@ pub const KubeContext = struct {
         }
     }
 
-    fn argv(self: KubeContext) ![]const []const u8 {
-        var argv_buffer = std.ArrayList([]const u8).init(self.allocator);
-        var r = std.ArrayList([]const u8).init(self.allocator);
-        defer argv_buffer.deinit();
-
-        if (self.context) |context| {
-            if (self.namespace) |namespace| {
-                try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config set-context \"{s}\" --namespace=\"{s}\"", .{ context, namespace }));
-            }
-            try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config use-context \"{s}\"", .{context}));
-        } else if (self.namespace) |namespace| {
-            try argv_buffer.append(try std.fmt.allocPrint(self.allocator, "kubectl config set-context \"$(kubectl config current-context)\" --namespace=\"{s}\"", .{namespace}));
-        } else {
-            return error.NoCommand;
-        }
-        try argv_buffer.appendSlice(&[_][]const u8{self.shell});
-        const argv1 = try std.mem.join(self.allocator, " && ", argv_buffer.items);
-        try r.appendSlice(&[_][]const u8{ self.shell, "-c", argv1 });
-        return r.toOwnedSlice();
-    }
-
     pub fn run(self: KubeContext) !void {
         var buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
         const kubeconfig_real_path = try std.os.realpath(self.kubeconfig, &buf);
-        const new_kubeconfig = try fs.path.joinZ(self.allocator, &[_][]const u8{ tempDir(), &randomString() });
-        try fs.copyFileAbsolute(kubeconfig_real_path, new_kubeconfig, .{ .override_mode = 0o600 });
-        _ = c.setenv("KUBECONFIG", new_kubeconfig, 1);
-        const _argv = try self.argv();
-        var child = std.ChildProcess.init(_argv, self.allocator);
-        const term = try std.ChildProcess.spawnAndWait(&child);
-        switch (term.Exited) {
-            0 => try std.os.kill(c.getppid(), std.os.SIG.HUP),
-            1 => return,
-            else => unreachable,
+        const new_kubeconfig: [:0]const u8 = try fs.path.joinZ(self.allocator, &[_][]const u8{ tempDir(), &randomString() });
+
+        const file = try std.fs.openFileAbsolute(kubeconfig_real_path, .{});
+        defer file.close();
+
+        var buf_stream = std.io.bufferedReader(file.reader());
+        var reader = buf_stream.reader();
+
+        var parser: yaml.Parser = undefined;
+        try parser.initStream(self.allocator, &reader);
+        defer parser.deinit();
+
+        var tree = try parser.tree();
+
+        if (self.context) |target_context| {
+            switch (tree.root) {
+                .Object => |*root| {
+                    const context_array = root.get("contexts") orelse return error.InvalidConfig;
+                    if (@as(yaml.Value, context_array) != yaml.Value.Array)
+                        return error.InvalidConfig;
+
+                    var context_not_found = true;
+                    for (context_array.Array.items) |context_item| {
+                        if (@as(yaml.Value, context_item) != yaml.Value.Object)
+                            return error.InvalidConfig;
+
+                        const context_name = context_item.Object.get("name") orelse return error.InvalidConfig;
+                        if (@as(yaml.Value, context_name) != yaml.Value.String)
+                            return error.InvalidConfig;
+
+                        if (std.mem.eql(u8, context_name.String.value, target_context)) {
+                            try root.put("current-context", context_name);
+                            context_not_found = false;
+                            break;
+                        }
+                    }
+
+                    if (context_not_found)
+                        return error.ContextNotFound;
+                },
+                else => return error.InvalidConfig,
+            }
         }
+
+        if (self.namespace) |target_namespace| {
+            switch (tree.root) {
+                .Object => |*root| {
+                    const current_context = root.get("current-context") orelse return error.NoContextSet;
+                    if (@as(yaml.Value, current_context) != yaml.Value.String)
+                        return error.InvalidConfig;
+
+                    const context_array = root.get("contexts") orelse return error.InvalidConfig;
+                    if (@as(yaml.Value, context_array) != yaml.Value.Array)
+                        return error.InvalidConfig;
+
+                    var context_not_found = true;
+                    for (context_array.Array.items) |context_item| {
+                        if (@as(yaml.Value, context_item) != yaml.Value.Object)
+                            return error.InvalidConfig;
+
+                        const context_name = context_item.Object.get("name") orelse return error.InvalidConfig;
+                        if (@as(yaml.Value, context_name) != yaml.Value.String)
+                            return error.InvalidConfig;
+
+                        if (std.mem.eql(u8, context_name.String.value, current_context.String.value)) {
+                            var context = context_item.Object.get("context") orelse return error.InvalidConfig;
+                            if (@as(yaml.Value, context) != yaml.Value.Object)
+                                return error.InvalidConfig;
+                            try context.Object.put("namespace", yaml.Value{ .String = .{ .value = target_namespace } });
+                            context_not_found = false;
+                            break;
+                        }
+                    }
+                    if (context_not_found)
+                        return error.ContextNotFound;
+                },
+                else => return error.InvalidConfig,
+            }
+        }
+
+        {
+            var f = try std.fs.createFileAbsolute(new_kubeconfig, .{});
+
+            defer f.close();
+
+            var bs = std.io.bufferedWriter(f.writer());
+            var st = bs.writer();
+            try tree.write(&st, .{});
+            try bs.flush();
+        }
+
+        _ = c.setenv("KUBECONFIG", new_kubeconfig.ptr, 1);
+
+        var child = std.ChildProcess.init(&[_][]const u8{self.shell}, self.allocator);
+        _ = try std.ChildProcess.spawnAndWait(&child);
+        std.os.kill(c.getppid(), std.os.SIG.HUP) catch {};
     }
 };
 
