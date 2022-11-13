@@ -1,4 +1,4 @@
-ZIG_VERSION := 0.10.0-dev.3051+b8bf5de75
+ZIG_VERSION := 0.11.0-dev.149+7733246d6
 IMAGE_NAME := zigci
 ZIG_TARGET := x86_64-macos.12
 TRIPETS := x86_64-macos.12 aarch64-macos.12 x86_64-linux

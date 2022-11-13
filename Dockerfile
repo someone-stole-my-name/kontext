@@ -1,6 +1,6 @@
 FROM alpine:3.16
 
-ARG ZIG_VERSION=0.9.0
+ARG ZIG_VERSION
 
 RUN apk update && \
     apk --no-cache add \
